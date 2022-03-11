@@ -13,9 +13,10 @@ import observe from 'inquirer/lib/utils/events.js';
 import Paginator from 'inquirer/lib/utils/paginator.js';
 import type {
 	Answers,
-	Question,
+	DistinctChoice,
 	CheckboxChoiceOptions,
 	AllChoiceMap,
+	Question,
 } from 'inquirer';
 import type inquirer from 'inquirer';
 import type Choice from 'inquirer/lib/objects/choice.js';
@@ -78,7 +79,7 @@ declare module 'inquirer' {
 	}
 }
 
-type DistinctChoice<T = Answers> = AllChoiceMap<T>[keyof AllChoiceMap<T>];
+type PossibleChoice<T = Answers> = AllChoiceMap<T>[keyof AllChoiceMap<T>];
 
 class SuperCheckboxPrompt extends Base {
 	declare opt: inquirer.prompts.PromptOptions & {
@@ -105,7 +106,7 @@ class SuperCheckboxPrompt extends Base {
 	defaults: string[] | undefined;
 	paginator: Paginator;
 	searchInput: string;
-	lastSourcePromise: Promise<DistinctChoice[]> | undefined;
+	lastSourcePromise: Promise<inquirer.DistinctChoice[]> | undefined;
 	done: (value: any) => void;
 
 	constructor(questions: Question, rl: Interface, answers: Answers) {
@@ -139,10 +140,9 @@ class SuperCheckboxPrompt extends Base {
 	): Promise<DistinctChoice[]> {
 		if (Array.isArray(this.opt.source)) {
 			// Use a default filter
-			return this.opt.source.filter((choice) => {
-				const value = (choice as CheckboxChoiceOptions).value as string;
-				return line?.toLowerCase().includes(value);
-			});
+			return this.opt.source.filter((choice) =>
+				(choice as string)?.toLowerCase().includes((line ?? '').toLowerCase())
+			);
 		} else {
 			return this.opt.source(answers, line);
 		}
@@ -215,7 +215,7 @@ class SuperCheckboxPrompt extends Base {
 	 * Execute the source function to get the choices and render them
 	 */
 	async executeSource() {
-		let sourcePromise: Promise<DistinctChoice[]> | undefined;
+		let sourcePromise: Promise<inquirer.DistinctChoice[]> | undefined;
 
 		// Remove spaces
 		const line = this.rl.line.trim();
@@ -248,7 +248,7 @@ class SuperCheckboxPrompt extends Base {
 				this.searching = false;
 
 				// Save the new choices
-				this.choices = new Choices(choices, this.answers);
+				this.choices = new Choices(choices as PossibleChoice[], this.answers);
 
 				// Foreach choice
 				this.choices.forEach((choice) => {
