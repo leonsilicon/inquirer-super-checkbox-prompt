@@ -29,7 +29,6 @@
 		"@commitlint/cli": "^16.2.1",
 		"@leonzalion/configs": "^1.1.10",
 		"@types/inquirer": "^8.2.0",
-		"@types/lodash": "^4.14.179",
 		"@types/node": "^17.0.21",
 		"desm": "^1.2.0",
 		"eslint": "^8.10.0",
