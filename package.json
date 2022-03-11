@@ -37,7 +37,7 @@
 		"lint-staged": "^12.3.5",
 		"lion-git-hooks": "^1.0.7",
 		"lion-system": "^1.0.11",
-		"lionp": "^1.0.20",
+		"lionp": "^1.0.21",
 		"prettier": "^2.5.1",
 		"tsc-alias": "^1.6.4",
 		"typescript": "^4.6.2",
