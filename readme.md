@@ -1,0 +1,1 @@
+inquirer-autocomplete-checkbox-prompt
