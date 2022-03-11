@@ -4,7 +4,7 @@
 import type { Interface } from 'node:readline';
 import _ from 'lodash';
 import chalk from 'chalk';
-import { map, takeUntil } from 'rxjs/operators/index.js';
+import { map, takeUntil } from 'rxjs';
 import cliCursor from 'cli-cursor';
 import figures from 'figures';
 import Base from 'inquirer/lib/prompts/base.js';
@@ -43,12 +43,12 @@ declare module 'inquirer' {
 		/**
 		Whether the current choice should be highlighted.
 		*/
-		highlight: boolean;
+		highlight?: boolean;
 
 		/**
 		Whether the checkbox list should be searchable
 		*/
-		searchable: boolean;
+		searchable?: boolean;
 		/**
 		The choices that should be checked at the start.
 		*/
@@ -57,12 +57,12 @@ declare module 'inquirer' {
 		/**
 		The number of choices shown on one page
 		*/
-		pageSize: number;
+		pageSize?: number;
 
 		/**
 		An array of choices or a function returning an array of choices.
 		 */
-		choices:
+		source:
 			| inquirer.DistinctChoice[]
 			| ((
 					answers: inquirer.Answers,
@@ -84,9 +84,9 @@ class SuperCheckboxPrompt extends Base {
 	declare opt: inquirer.prompts.PromptOptions & {
 		highlight: boolean;
 		searchable: boolean;
-		defaults?: string[];
+		defaults: string[];
 		pageSize: number;
-		choices:
+		source:
 			| DistinctChoice[]
 			| ((
 					answers: Answers,
@@ -104,16 +104,18 @@ class SuperCheckboxPrompt extends Base {
 	lastQuery: string | undefined;
 	defaults: string[] | undefined;
 	paginator: Paginator;
+	searchInput: string;
 	lastSourcePromise: Promise<DistinctChoice[]> | undefined;
 	done: (value: any) => void;
 
 	constructor(questions: Question, rl: Interface, answers: Answers) {
 		super(questions, rl, answers);
+
 		this.opt.highlight = this.opt.highlight ?? false;
 		this.opt.searchable = this.opt.searchable ?? false;
 
 		// Doesn't have source option
-		if (this.opt.choices === undefined) {
+		if (this.opt.source === undefined) {
 			this.throwParamError('source');
 		}
 
@@ -135,10 +137,14 @@ class SuperCheckboxPrompt extends Base {
 		answers: Answers,
 		line?: string
 	): Promise<DistinctChoice[]> {
-		if (Array.isArray(this.opt.choices)) {
-			return this.opt.choices;
+		if (Array.isArray(this.opt.source)) {
+			// Use a default filter
+			return this.opt.source.filter((choice) => {
+				const value = (choice as CheckboxChoiceOptions).value as string;
+				return line?.toLowerCase().includes(value);
+			});
 		} else {
-			return this.opt.choices(answers, line);
+			return this.opt.source(answers, line);
 		}
 	}
 
@@ -148,57 +154,61 @@ class SuperCheckboxPrompt extends Base {
 	_run(callback: (value: any) => void) {
 		this.done = callback;
 
-		void this.executeSource().then(() => {
-			const events = observe(this.rl);
+		this.executeSource()
+			.then(() => {
+				const events = observe(this.rl);
 
-			const validation = this.handleSubmitEvents(
-				events.line.pipe(map(this.getCurrentValue.bind(this)))
-			);
+				const validation = this.handleSubmitEvents(
+					events.line.pipe(map(this.getCurrentValue.bind(this)))
+				);
 
-			void validation.success.forEach(this.onEnd.bind(this));
-			void validation.error.forEach(this.onError.bind(this));
+				void validation.success.forEach(this.onEnd.bind(this));
+				void validation.error.forEach(this.onError.bind(this));
 
-			void events.normalizedUpKey
-				.pipe(takeUntil(validation.success))
-				.forEach(this.onUpKey.bind(this));
+				void events.normalizedUpKey
+					.pipe(takeUntil(validation.success))
+					.forEach(this.onUpKey.bind(this));
 
-			void events.normalizedDownKey
-				.pipe(takeUntil(validation.success))
-				.forEach(this.onDownKey.bind(this));
+				void events.normalizedDownKey
+					.pipe(takeUntil(validation.success))
+					.forEach(this.onDownKey.bind(this));
 
-			void events.keypress
-				.pipe(takeUntil(validation.success))
-				.forEach(this.onKeypress.bind(this));
-
-			void events.spaceKey
-				.pipe(takeUntil(validation.success))
-				.forEach(this.onSpaceKey.bind(this));
-
-			// If the search is enabled
-			if (this.opt.searchable) {
 				void events.keypress
 					.pipe(takeUntil(validation.success))
 					.forEach(this.onKeypress.bind(this));
-			} else {
-				void events.numberKey
-					.pipe(takeUntil(validation.success))
-					.forEach(this.onNumberKey.bind(this));
-				void events.aKey
-					.pipe(takeUntil(validation.success))
-					.forEach(this.onAllKey.bind(this));
-				void events.iKey
-					.pipe(takeUntil(validation.success))
-					.forEach(this.onInverseKey.bind(this));
-			}
 
-			if (this.rl.line) {
-				this.onKeypress();
-			}
+				void events.spaceKey
+					.pipe(takeUntil(validation.success))
+					.forEach(this.onSpaceKey.bind(this));
 
-			// Init the prompt
-			cliCursor.hide();
-			this.render();
-		});
+				// If the search is enabled
+				if (this.opt.searchable) {
+					void events.keypress
+						.pipe(takeUntil(validation.success))
+						.forEach(this.onKeypress.bind(this));
+				} else {
+					void events.numberKey
+						.pipe(takeUntil(validation.success))
+						.forEach(this.onNumberKey.bind(this));
+					void events.aKey
+						.pipe(takeUntil(validation.success))
+						.forEach(this.onAllKey.bind(this));
+					void events.iKey
+						.pipe(takeUntil(validation.success))
+						.forEach(this.onInverseKey.bind(this));
+				}
+
+				if (this.rl.line) {
+					this.onKeypress();
+				}
+
+				// Init the prompt
+				cliCursor.hide();
+				this.render();
+			})
+			.catch((error) => {
+				this.onError({ isValid: String(error) });
+			});
 	}
 
 	/**
@@ -209,6 +219,7 @@ class SuperCheckboxPrompt extends Base {
 
 		// Remove spaces
 		const line = this.rl.line.trim();
+		this.searchInput = this.rl.line;
 
 		// Same last search query that already loaded
 		if (line === this.lastQuery) {
@@ -226,40 +237,43 @@ class SuperCheckboxPrompt extends Base {
 		this.lastSourcePromise = sourcePromise;
 		this.searching = true;
 
-		void sourcePromise.then((choices) => {
-			// Is not the last issued promise
-			if (this.lastSourcePromise !== sourcePromise) {
-				return;
-			}
-
-			// Reset the searching status
-			this.searching = false;
-
-			// Save the new choices
-			this.choices = new Choices(choices, this.answers);
-
-			// Foreach choice
-			this.choices.forEach((choice) => {
-				const checkboxChoice = choice as CheckboxChoiceOptions;
-				// Is the current choice included in the current checked choices
-				if (this.value.includes(checkboxChoice.value)) {
-					this.toggleChoice(checkboxChoice, true);
-				} else {
-					this.toggleChoice(checkboxChoice, false);
+		sourcePromise
+			.then((choices) => {
+				// Is not the last issued promise
+				if (this.lastSourcePromise !== sourcePromise) {
+					return;
 				}
 
-				// Is the current choice included in the default values
-				if (this.defaults?.includes(checkboxChoice.value)) {
-					this.toggleChoice(checkboxChoice, true);
-				}
+				// Reset the searching status
+				this.searching = false;
+
+				// Save the new choices
+				this.choices = new Choices(choices, this.answers);
+
+				// Foreach choice
+				this.choices.forEach((choice) => {
+					const checkboxChoice = choice as CheckboxChoiceOptions;
+					// Is the current choice included in the current checked choices
+					if (this.value.includes(checkboxChoice.value)) {
+						this.toggleChoice(checkboxChoice, true);
+					} else {
+						this.toggleChoice(checkboxChoice, false);
+					}
+
+					// Is the current choice included in the default values
+					if (this.defaults?.includes(checkboxChoice.value)) {
+						this.toggleChoice(checkboxChoice, true);
+					}
+				});
+
+				// Reset the pointer to select the first choice
+				this.pointer = 0;
+				this.render();
+				this.defaults = undefined;
+			})
+			.catch((error) => {
+				this.onError({ isValid: String(error) });
 			});
-
-			// Reset the pointer to select the first choice
-			this.pointer = 0;
-			this.render();
-			this.defaults = undefined;
-			this.firstSourceLoading = false;
-		});
 
 		return sourcePromise;
 	}
@@ -303,7 +317,7 @@ class SuperCheckboxPrompt extends Base {
 		// If the search is enabled
 		if (this.opt.searchable) {
 			// Print the current search query
-			message += this.rl.line;
+			message += this.searchInput;
 		}
 
 		// Searching mode
@@ -452,15 +466,16 @@ class SuperCheckboxPrompt extends Base {
 	 * When the user press any key
 	 */
 	onKeypress() {
-		void this.executeSource();
+		this.firstSourceLoading = false;
+		this.executeSource().catch((error) => {
+			this.onError({ isValid: String(error) });
+		});
 		this.render();
 	}
 
 	/**
 	Toggle (check/uncheck) a specific choice
-
-	@param {Boolean} checked if not specified the status will be toggled
-	@param {Object}  choice
+	@param checked if not specified the status will be toggled
 	*/
 	toggleChoice(choice: CheckboxChoiceOptions, checked?: boolean) {
 		// Default value for checked
@@ -493,7 +508,7 @@ class SuperCheckboxPrompt extends Base {
 	Get the checkbox figure (sign)
 	*/
 	getCheckboxFigure(checked: boolean | undefined): string {
-		return checked ? chalk.green(figures.checkboxOn) : figures.checkboxOff;
+		return checked ? chalk.green(figures.radioOn) : figures.radioOff;
 	}
 
 	/**

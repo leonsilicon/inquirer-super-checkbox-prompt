@@ -1,10 +1,11 @@
 import inquirer from 'inquirer';
-import AutocompleteCheckboxPrompt from '~/prompt.js';
+import SuperCheckboxPrompt from '~/prompt.js';
 
-inquirer.registerPrompt('autocomplete-checkbox', AutocompleteCheckboxPrompt);
+inquirer.registerPrompt('super-checkbox', SuperCheckboxPrompt);
 await inquirer.prompt({
-	name: 'key',
-	pressToContinueMessage: 'Press y to continue...',
-	type: '',
-	anyKey: true,
+	type: 'super-checkbox',
+	message: 'Select a choice',
+	searchable: true,
+	name: 'choice',
+	source: ['Choice 1', 'Choice 2', 'Choice 3'],
 });
