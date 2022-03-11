@@ -8,7 +8,11 @@ export class ReadlineStub extends Interface {
 	input: EventEmitter;
 
 	constructor() {
-		const input = new Duplex({ read() {} });
+		const input = new Duplex({
+			read() {
+				/* noop */
+			},
+		});
 		super(input);
 
 		this.line = '';

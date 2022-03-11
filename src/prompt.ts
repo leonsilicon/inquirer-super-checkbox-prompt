@@ -2,7 +2,6 @@
 /* eslint-disable unicorn/no-array-for-each */
 
 import type { Interface } from 'node:readline';
-import _ from 'lodash';
 import chalk from 'chalk';
 import { map, takeUntil } from 'rxjs';
 import cliCursor from 'cli-cursor';
